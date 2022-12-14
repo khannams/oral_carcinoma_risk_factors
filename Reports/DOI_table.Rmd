@@ -1,0 +1,58 @@
+---
+title: "DOI_table"
+author: "Mehak Khanna"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, warning = FALSE, message=FALSE)
+library(tidyverse)
+library(tableone)
+library(table1)
+library(here)
+library(readr)
+library(lubridate)
+library(readxl)
+library(eeptools)
+library(knitr)
+
+baseline_scc_doi<- read_csv(here("Data","clean_baseline_01-12-2022.csv"))
+```
+
+##Please note, Column 125 was used as the DOI information to draw up these tables
+
+```{r, echo=FALSE, warning=FALSE, comment=FALSE}
+baseline_scc_doi$doi_125_round<-as.factor(baseline_scc_doi$doi_125_round)
+tab1<-CreateTableOne(vars = "doi_125_round",
+               strata = c("surgery_type","Event_final_det"),
+               data = (baseline_scc_doi%>% filter(doi_cat== "true_doi")),
+               includeNA = T, test = F)%>% print(showAllLevels=TRUE, format="f")
+kableone(tab1)
+
+tab2<-CreateTableOne(vars = "doi_125_round",
+               strata = c("surgery_type","n_patho_stage"),
+               data = (baseline_scc_doi%>% filter(doi_cat== "true_doi")),
+               includeNA = T, test = F)%>% print(showAllLevels=TRUE, format="f")
+kableone(tab2)
+
+```
+
+##Please note column 42 has been used to derive the following information
+```{r, echo=FALSE}
+class(baseline_scc_doi$doi_42_round)
+baseline_scc_doi$doi_42_round<-round(baseline_scc_doi$doi_42)
+baseline_scc_doi$doi_42_round<-as.factor(baseline_scc_doi$doi_42_round)
+tab1<-CreateTableOne(vars = "doi_42_round",
+               strata = c("surgery_type","Event_final_det"),
+               data = (baseline_scc_doi%>% filter(doi_cat== "true_doi")),
+               includeNA = T, test = F)%>% print(showAllLevels=TRUE, format="f")
+kableone(tab1)
+
+tab2<-CreateTableOne(vars = "doi_42_round",
+               strata = c("surgery_type","n_patho_stage"),
+               data = (baseline_scc_doi%>% filter(doi_cat== "true_doi")),
+               includeNA = T, test = F)%>% print(showAllLevels=TRUE, format="f")
+kableone(tab2)
+```
+

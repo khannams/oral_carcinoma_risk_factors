@@ -1,0 +1,365 @@
+---
+title: "Predictors of occult lymph node metastasis"
+author: "Mehak Khanna"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, warning = FALSE, message=FALSE)
+library(tidyverse)
+library(tableone)
+library(table1)
+library(here)
+library(readr)
+library(lubridate)
+library(readxl)
+library(eeptools)
+library(knitr)
+
+baseline_scc_doi<- read_csv(here("Data","clean_baseline_05-12-2022.csv"))
+```
+
+## Univariate logistic regression  - Model 1
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - Depth of Invasion (rounded)
+
+```{r DOI model, echo=FALSE}
+class(baseline_scc_doi$doi_125_round)
+baseline_scc_doi$doi_125_round<-factor(baseline_scc_doi$doi_125_round)
+
+# baseline_scc_doi%>%
+#   #select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, n_patho_stage, n_clinc_stage)%>%
+#   filter(doi_cat== "true_doi" & !is.na(doi_125_round) & n_clinc_stage== "N0")%>% 
+#   count(n_patho_stage) #leaves us with 82 participants
+# 
+# baseline_scc_doi%>%
+#   select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, n_patho_stage, n_clinc_stage)%>%
+#   filter(doi_cat== "true_doi" & !is.na(doi_125_round) & n_clinc_stage== "N0")%>% 
+#   group_by(doi_125_round)%>% arrange(doi_125_round) %>%view() #add filter of removing those for whom path_n stage not applicable
+#   
+# baseline_scc_doi%>%
+#   select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, n_patho_stage, n_clinc_stage)%>%
+#   filter(doi_cat== "true_doi" & !is.na(doi_125_round) & n_clinc_stage== "N0" & n_patho_stage != "Not Applicable")%>% 
+#   count(n_patho_stage)
+
+log.reg<-baseline_scc_doi%>%
+  select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, doi_125,n_patho_stage, n_clinc_stage)%>%
+  filter(doi_cat== "true_doi" & !is.na(doi_125_round) & n_clinc_stage== "N0" & n_patho_stage != "Not Applicable")%>% 
+  group_by(doi_125_round)%>% arrange(doi_125_round) #%>% view()
+
+log.reg$occultmet<-NA
+for (i in 1:nrow(log.reg)) {
+  if (log.reg$n_patho_stage[i] != log.reg$n_clinc_stage[i]){
+    log.reg$occultmet[i]<- 1 #meaning yes occult metastasis seen
+  } else{
+    log.reg$occultmet[i]<-0 #meaning no occult metastasis
+  }
+}
+
+#ploting the two variables before logistic regression
+#class(log.reg$doi_125_round)
+log.reg$doi_125_round_num<-as.numeric(as.character(log.reg$doi_125_round))#changing back to numeric
+table(log.reg$occultmet, log.reg$doi_125_round_num, exclude = NULL)
+#table(log.reg$doi_125_round, log.reg$doi_125_round_num, exclude = NULL)
+boxplot(doi_125_round_num ~ occultmet, data = log.reg, xlab = "Occult metastasis", ylab = "DOI",
+        main = "Distribution of occult metastasis by DOI for patients who reported TRUE_DOI and clinic stage was N0") # few outliers
+
+
+##Models predicting occult metastasis--------------------
+##DOI
+#fitting the model
+lr.fit<-glm(occultmet ~ doi_125_round_num, data = log.reg, family = binomial)
+summary(lr.fit)
+
+#getting odds ratio with confidence interval
+round(exp(lr.fit$coefficients), digits = 2)
+round(exp(confint(lr.fit)), digits = 3)
+#odds ratio for DOI is 1.02. This means the odds of occult metastasis increase by 2% for each mm increase in DOI
+```
+###Interpretation of the results:
+Occult metastasis ~ Depth of invasion(rounded)
+<br/>
+OR = 1.02 (95% CI 0.95 - 1.09)
+As the depth of invasion increases by 1mm the odds of occult metastasis increases by 2%
+<br/>
+This result is not statistically significant as the null value of 1 is included in the 95% CI.
+
+
+```{r DOI model best fit line, echo=FALSE}
+#getting predicted values
+predicted_data<-data.frame(doi_125_round_num = seq(min(log.reg$doi_125_round_num), 
+                                                   max(log.reg$doi_125_round_num),
+                                                   len = 500))
+
+predicted_data$occultmet<-predict(lr.fit, predicted_data, type = "response") #geting the predicted values
+  
+predit_se<-predict(lr.fit,  predicted_data, type = "response", se.fit = T) #se.fitting to get CI for predicted values
+
+predicted_data$lowerCI<-predit_se$fit-1.96*predit_se$se.fit
+predicted_data$upperCI<-predit_se$fit+1.96*predit_se$se.fit
+
+
+ggplot(data = log.reg,
+       aes(x=doi_125_round_num,
+           y=occultmet))+
+  geom_point()+
+  stat_smooth(method = "glm", se =TRUE, method.args = list(family=binomial))+
+  xlab(label = "Depth of invasion(mm)")+
+  ylab(label = "Probability fo occult lymphnode metstasis")+
+  labs(title= "Best fit line for predicting occult metastasis based on depth of invasion of tumor")+
+  theme_light()
+```
+
+## Univariate logistic regression  - Model 2
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - Depth of Invasion (decimal)
+
+
+```{r, echo=FALSE}
+log.reg_doi<-baseline_scc_doi%>%
+  select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125, n_patho_stage, n_clinc_stage)%>%
+  filter(doi_cat== "true_doi" & !is.na(doi_125) & n_clinc_stage== "N0" & n_patho_stage != "Not Applicable")%>% 
+  group_by(doi_125)%>% arrange(doi_125) %>% view()
+
+log.reg_doi$occultmet<-NA
+for (i in 1:nrow(log.reg_doi)) {
+  if (log.reg_doi$n_patho_stage[i] != log.reg_doi$n_clinc_stage[i]){
+    log.reg_doi$occultmet[i]<- 1 #meaning yes occult metastasis seen
+  } else{
+    log.reg_doi$occultmet[i]<-0 #meaning no occult metastasis
+  }
+}
+
+#class(log.reg_doi$doi_125)
+#boxplot(doi_125 ~ occultmet, data = log.reg_doi, xlab = "Occult metastasis", ylab = "DOI_cont",
+        #main = "Distribution of occult metastasis by DOI for patients who reported TRUE_DOI and clinic stage was N0") # few outliers
+
+#fitting the model
+lr.fit_doicont<-glm(occultmet ~ doi_125, data = log.reg_doi, family = binomial)
+summary(lr.fit_doicont)
+confint(lr.fit_doicont)
+
+
+#getting odds ratio with confidence interval
+round(exp(lr.fit_doicont$coefficients), digits = 2)
+round(exp(confint(lr.fit_doicont)), digits = 2)
+#odds ratio for DOI is 1.02. This means the odds of occult metastasis increase by 2% for each mm increase in DOI
+
+```
+
+###Interpretation of the results:
+Occult metastasis ~ Depth of invasion(decimal)
+<br/>
+OR = 1.02 (95% CI 0.96 - 1.1)
+As the depth of invasion increases by 1mm the odds of occult metastasis increases by 2%
+<br/>
+This result is not statistically significant as the null value of 1 is included in the 95% CI.
+
+```{r, echo=FALSE}
+#getting predicted values
+predicted_data_doicont<-data.frame(doi_125 = seq(min(log.reg_doi$doi_125), 
+                                                   max(log.reg_doi$doi_125),
+                                                   len = 500))
+
+predicted_data_doicont$occultmet<-predict(lr.fit_doicont, predicted_data_doicont, type = "response") #getting the predicted values
+
+predit_doicon_se<-predict(lr.fit_doicont,  predicted_data_doicont, type = "response", se.fit = T) #se.fitting to get CI for predicted values
+
+predicted_data_doicont$lowerCI<-predit_doicon_se$fit-1.96*predit_doicon_se$se.fit
+predicted_data_doicont$upperCI<-predit_doicon_se$fit+1.96*predit_doicon_se$se.fit
+
+
+ggplot(data = log.reg_doi,
+       aes(x=doi_125,
+           y=occultmet))+
+  geom_point()+
+  stat_smooth(method = "glm", se =TRUE, method.args = list(family=binomial))+
+  xlab(label = "Depth of invasion(mm)-continous: decimal point")+
+  ylab(label = "Probability fo occult lymphnode metstasis")+
+  theme_light()
+```
+
+
+## Univariate logistic regression  - Model 3
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - Perinural Invasion
+
+```{r , echo=FALSE}
+# baseline_scc_doi%>%
+#   #select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, n_patho_stage, n_clinc_stage)%>%
+#   filter(n_clinc_stage== "N0")%>% 
+#   count(n_patho_stage) #leaves us with 82 participants
+
+
+PNI_log.reg<-baseline_scc_doi%>%
+  select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, peri_neu_inva,n_patho_stage, n_clinc_stage)%>%
+  filter(n_clinc_stage== "N0" & n_patho_stage != "Not Applicable", !is.na(peri_neu_inva))%>% view()
+#127 participants for this model
+
+PNI_log.reg$occultmet<-NA
+for (j in 1:nrow(PNI_log.reg)) {
+  if (PNI_log.reg$n_patho_stage[j] != PNI_log.reg$n_clinc_stage[j]){
+    PNI_log.reg$occultmet[j]<- 1 #meaning yes occult metastasis seen
+  } else{
+    PNI_log.reg$occultmet[j]<-0 #meaning no occult metastasis
+  }
+}  
+
+table(PNI_log.reg$occultmet, PNI_log.reg$peri_neu_inva, exclude = NULL)
+
+pni.lr.fit<-glm(occultmet~peri_neu_inva, data = PNI_log.reg, family = binomial)
+summary(pni.lr.fit)
+round(exp(pni.lr.fit$coefficients), digits = 2)
+round(exp(confint(pni.lr.fit)), digits = 2)
+
+```
+
+###Interpretation of the results:
+Occult metastasis ~ Perinural Invasion
+<br/>
+OR = 2.35 (95% CI 1.08 - 5.26)
+The odds of developing occult metastasis when perinural invasion is present is 2.35 times the odds for those who do not have perinural invasion
+<br/>
+This result is  statistically significant as the null value of 1 is not included in the 95% CI.
+
+## Univariate logistic regression  - Model 4
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - Level of differentiation
+```{r Degree of differentiation model, echo=FALSE}
+#Grade of differentiation
+#table(baseline_scc_doi$biopsy_differen, exclude = NULL)
+DD_log.reg<-baseline_scc_doi%>%
+  select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, peri_neu_inva,biopsy_differen,n_patho_stage, n_clinc_stage)%>%
+  filter(n_clinc_stage== "N0" & n_patho_stage != "Not Applicable", !is.na(biopsy_differen))%>% view()
+#110 participants for this model
+
+DD_log.reg$occultmet<-NA
+for (k in 1:nrow(DD_log.reg)) {
+  if (DD_log.reg$n_patho_stage[k] != DD_log.reg$n_clinc_stage[k]){
+    DD_log.reg$occultmet[k]<- 1 #meaning yes occult metastasis seen
+  } else{
+    DD_log.reg$occultmet[k]<-0 #meaning no occult metastasis
+  }
+}  
+
+#table(DD_log.reg$occultmet, DD_log.reg$biopsy_differen, exclude = NULL)
+#class(DD_log.reg$biopsy_differen)
+DD_log.reg$biopsy_differen<-factor(DD_log.reg$biopsy_differen, levels=c("Poorly","Moderate","Well"))
+table(DD_log.reg$occultmet, DD_log.reg$biopsy_differen, exclude = NULL)
+
+DD.lr.fit<-glm(occultmet~biopsy_differen, data = DD_log.reg, family = binomial)
+summary(DD.lr.fit)
+round(exp(DD.lr.fit$coefficients), digits = 2)
+round(exp(confint(DD.lr.fit)), digits = 2)
+
+```
+
+###Interpretation of the results:
+Occult metastasis ~ Degree of differentiation
+<br/>
+1) Moderately differentiated
+OR = 0.69 (95% CI 0.19 - 2.66)
+The odds of developing occult metastasis when Moderate degree of differentiation is present is 0.69 times the odds for those poorly differentiated tumors.
+<br/>
+This result is not statistically significant as the null value of 1 is included in the 95% CI.
+<br/>
+<br/>
+1) Well differentiated
+OR = 0.26 (95% CI 0.06 - 1.13)
+The odds of developing occult metastasis when well differentiated is 0.26 times the odds for those poorly differentiated tumors.
+<br/>
+This result is not statistically significant as the null value of 1 is included in the 95% CI.
+
+
+## Univariate logistic regression  - Model 5
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - Lymphovascular invasion
+```{r , echo=FALSE}
+# baseline_scc_doi%>%
+#   select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, n_patho_stage, n_clinc_stage)%>%
+#   filter(n_clinc_stage== "N0")%>%
+#   count(n_patho_stage) #leaves us with 82 participants
+
+
+LVI_log.reg<-baseline_scc_doi%>%
+  select(Patient.IDID.du.patient, surgery_type,doi_cat,doi_125_round, vas_lymph_inv,n_patho_stage, n_clinc_stage)%>%
+  filter(n_clinc_stage== "N0" & n_patho_stage != "Not Applicable", !is.na(vas_lymph_inv))%>% view()
+#127 participants for this model
+
+LVI_log.reg$occultmet<-NA
+for (j in 1:nrow(LVI_log.reg)) {
+  if (LVI_log.reg$n_patho_stage[j] != LVI_log.reg$n_clinc_stage[j]){
+    LVI_log.reg$occultmet[j]<- 1 #meaning yes occult metastasis seen
+  } else{
+    LVI_log.reg$occultmet[j]<-0 #meaning no occult metastasis
+  }
+}  
+
+table(LVI_log.reg$occultmet, LVI_log.reg$vas_lymph_inv, exclude = NULL)
+
+LVI.lr.fit<-glm(occultmet~vas_lymph_inv, data = LVI_log.reg, family = binomial)
+summary(LVI.lr.fit)
+round(exp(LVI.lr.fit$coefficients), digits = 2)
+round(exp(confint(LVI.lr.fit)), digits = 2)
+
+```
+###Interpretation of the results:
+Occult metastasis ~ Lympho-vascular invasion
+<br/>
+OR = 2.50 (95% CI 1.07 - 5.85)
+The odds of developing occult metastasis when lympho-vascular invasion is present is 2.50 times the odds for those who do not have lympho-vascular invasion
+<br/>
+This result is  statistically significant as the null value of 1 is not included in the 95% CI.
+
+
+## Univariate logistic regression  - Model 6
+<br/>
+1) Predicting probability of occult metastasis in lymph nodes
+<br/>
+2) risk factor - DOI - categorical variable
+
+```{r, echo=FALSE}
+class(log.reg$doi_125)
+log.reg$doi01_cat<-cut(log.reg$doi_125, 
+    breaks = c(0,1.9,3.9,5.9,7.9,9.9,50) ,
+    labels = c("0-1.9","2-3.9","4-5.9","6-7.9","8-9.9",">=10"),
+    include.lowest = T)
+
+table(log.reg$doi_125, log.reg$doi01_cat, exclude = NULL)
+
+doicat1.lr.fit<-glm(occultmet~doi01_cat, data = log.reg, family = binomial)
+summary(doicat1.lr.fit)
+round(exp(doicat1.lr.fit$coefficients), digits = 2)
+round(exp(confint(doicat1.lr.fit)), digits = 2)
+
+```
+
+
+```{r, echo=FALSE}
+
+log.reg$doi02_cat<-cut(log.reg$doi_125, 
+    breaks = c(0,2.9,4.9,6.9,8.9,10.9,50) ,
+    labels = c("0-2.9","3-4.9","5-6.9","7-8.9","9-10.9",">=11"),
+    include.lowest = T)
+
+table(log.reg$doi_125, log.reg$doi02_cat, exclude = NULL)
+
+doicat2.lr.fit<-glm(occultmet~doi02_cat, data = log.reg, family = binomial)
+summary(doicat2.lr.fit)
+round(exp(doicat2.lr.fit$coefficients), digits = 2)
+round(exp(confint(doicat2.lr.fit)), digits = 2)
+
+
+```
+

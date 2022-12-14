@@ -1,0 +1,186 @@
+---
+title: "03_DescriptiveReport_26-11-2022"
+author: "Mehak Khanna"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, warning = FALSE, message=FALSE)
+library(tidyverse)
+library(tableone)
+library(table1)
+library(here)
+library(lubridate)
+library(readxl)
+library(eeptools)
+library(knitr)
+scc_doi<-read_csv(here("Data","clean_scc_doi_26-11-2022.csv"))
+
+baseline_scc_doi<- read_csv(here("Data","baseline_scc_doi_26-11-2022.csv"))
+
+```
+
+
+```{r DOI category tables, include=T, echo=FALSE}
+##True DOI and tumour thickness----------------
+Tab1<-CreateCatTable(vars = "doi_cat",
+               data = baseline_scc_doi,
+               includeNA = T)%>% print(showAllLevels=T)
+kableone(Tab1, caption = "1: Frequency of categories of DOI")
+
+Tab2<-CreateCatTable(vars = c("know_doi_124", "surgery_type"),
+                     strata = "doi_cat",
+                     data = baseline_scc_doi, includeNA = T, test = F)%>% print(showAllLevels=T)
+kableone(Tab2, caption= "2: participants whose DOI is known and type of surgey VS the category of DOI recorded for them")
+
+#Demographic-------------------
+Tab3<-CreateTableOne(vars = c("age", "GenderSexe", "tobacco_hist", "tobacco_stat_diag", "alc_hist", "alc_stat_diag"),data = baseline_scc_doi, includeNA = T)%>%
+  print(showAllLevels=TRUE)
+
+kableone(Tab3, caption="3: Descriptive table of Demgraphic variables")
+
+##Length of follow-up---------------
+class(scc_doi$Follow_up_Date)
+
+kable(scc_doi%>%
+  group_by(Patient.IDID.du.patient)%>%
+  summarise(min(Follow_up_Date, na.rm=T), max(Follow_up_Date, na.rm = T),
+            len_flw_mon= as.numeric(`max(Follow_up_Date, na.rm = T)`-`min(Follow_up_Date, na.rm = T)`)/(365.25/12))%>%
+  summarise(mean=mean(len_flw_mon), SD=sd(len_flw_mon), 
+            median= median(len_flw_mon), min=min(len_flw_mon),
+            max=max(len_flw_mon),IQR = IQR(len_flw_mon)), 
+  caption = "4: Summary of lenth of follow-up in Months", digits = 2, format = "simple") 
+
+```
+
+
+Length of follow-up (in months) is at present calculated till the last date provided in the dataset. This means for some patients even after recurrence or metastasis the follow-ups continued. 
+The outcome of our study is recurrence, once the outcome has occurred should we continue continuing the follow up time?
+
+
+Below is the rounding to nearest whole number.
+Please note in variable 42 there is 0.74 that gets assigned to 1 on the other hand,
+
+```{r, echo=FALSE}
+#Depth of Invasion----------------
+table(baseline_scc_doi$doi_42, round(baseline_scc_doi$doi_42_round), exclude = NULL)
+```
+
+variable 125 has 0.36 that gets assigned 0. 
+```{r, echo=FALSE}
+table(baseline_scc_doi$doi_125, round(baseline_scc_doi$doi_125), exclude = NULL)
+```
+I'm using varibale 125 against DOI category to provide you tables. (Please let me know if that is alright)
+
+
+Below is a summary table for TRUE DOI and Tumor thickness
+```{r, echo=FALSE}
+Tab5<-CreateContTable(vars = "doi_125",
+                strata = "doi_cat",
+                data = baseline_scc_doi,
+                funcNames = c("mean","sd","Median","min","max"),
+                test = F, smd = F)
+
+print(summary(Tab5))
+
+```
+
+```{r, echo=FALSE}
+baseline_scc_doi$doi_125_round<-as.factor(round(baseline_scc_doi$doi_125))
+
+Tab6<-CreateCatTable(vars = "doi_125_round",
+               strata = "doi_cat",
+               data = baseline_scc_doi,
+               test = F, includeNA = T)%>% print(showAllLevels=T)
+kableone(Tab6, caption= "6: recorded DOI in mm by DOI category")
+
+Tab7<-CreateCatTable(vars = "doi_125_round",
+               strata = c("doi_cat","surgery_type"),
+               data = baseline_scc_doi,
+               test = F, includeNA = T)%>% print(showAllLevels=T)
+kableone(Tab7, caption= "7: recorded DOI in mm by DOI category and further separated by type of Surgery")
+
+
+tab8<-CreateTableOne(vars = "primary_site",
+               data = baseline_scc_doi, includeNA = T )%>%
+  print(ShowAllLevels=TRUE)
+
+kableone(tab8, caption="8: Distribution of site of primary lesion")
+
+
+tab9<-CreateTableOne(vars = c("t_clinc_stage", "n_clinc_stage","m_clinc_stage"),
+               data = baseline_scc_doi,
+               includeNA = T)%>% print(ShowAllLevels=T)
+
+kableone(tab9, caption="9: Distribution clinical TNM staging of primary lesion")
+
+
+tab10<- CreateCatTable(vars = "n_clinc_stage",
+                       strata = "n_radio_stage",
+                       data = baseline_scc_doi, includeNA = T, test = F)%>% print(showAllLevels=T)
+kableone(tab10, caption= "10: Probability fo clinic exam differing from radiographic results")
+
+
+tab11<-CreateTableOne(vars = "Pathological.stage.overall....Stage.Pathologique.Global",
+                     data = baseline_scc_doi,
+                     includeNA = T)%>%print(ShowAllLevels=T)
+
+kableone(tab11, caption="11: Distribution overall Pathologic staging of tumor")
+```
+
+```{r, Echo=FALSE}
+tab12<-CreateTableOne(vars = "tab_n_clinc_stage",
+               strata = "tab_n_patho_stage",
+               data = baseline_scc_doi,
+               includeNA = T, test = F) %>% print(showAllLevels=T)
+kableone(tab12, caption="12: Clinical node stages stratified by pathological node stage " )
+
+baseline_scc_doi<-baseline_scc_doi%>%
+  mutate(tab_n_clinc_radio_stage = case_when((tab_n_clinc_stage == "N0" & tab_n_radio_stage == "N0")~ "N0_clinc_radio",
+                                             (tab_n_clinc_stage != "N0" | tab_n_radio_stage != "N0") ~ "All not N0_clinc_radio"))
+
+Tab13<-CreateCatTable(vars = "tab_n_clinc_radio_stage",
+               strata = "tab_n_patho_stage",
+               data = baseline_scc_doi,includeNA = T, test = F)%>% print(showAllLevels=T)
+kable(Tab13, caption= "13: Clinical and Radiographic Nodes combination againist Pathologic Node")
+
+
+tab14<-CreateTableOne(vars = c("biopsy_differen",
+                              "final_patho_differen"),
+               data = baseline_scc_doi,
+               includeNA = T)%>% print(showAllLevels=T)
+kableone(tab14, caption = "14: distribution of participants by degree of differentiation")
+
+
+tab15<-CreateTableOne(vars = "Num_positive_nodes_fac",
+               data= baseline_scc_doi,
+               includeNA = T) %>% print(showAllLevels=T)
+kableone(tab15, caption="15: Distribution by no. of positive nodes")
+
+
+tab16<-CreateTableOne(vars = c("margins","neg_margins","extra_capsu","peri_neu_inva",
+                        "vas_lymph_inv","bone_inv","p16_status"),
+               data = baseline_scc_doi,
+               includeNA = T) %>% print(showAllLevels=T)
+kableone(tab16, caption="16: Distribution of participants by margin of tumor, perinural invasion and etc")
+```
+
+```{r, echo=FALSE}
+
+tab17a<-CreateContTable(vars = "age",
+                       funcNames = c("n","mean","sd","median","min","max"),
+                       strata = "reason_death",
+                      data = (scc_doi%>%filter(...148 == "Expired")),
+                      test = F)
+print(summary(tab17a))
+
+
+tab17<-CreateCatTable(vars = c("GenderSexe", "tobacco_hist", "tobacco_stat_diag", "alc_hist, alc_stat_diag","t_clinc_stage","n_clinc_stage", "t_patho_stage","n_patho_stage", "Pathological.stage.overall....Stage.Pathologique.Global","surgery_type","Num_positive_nodes_fac","Pathological.stage.overall....Stage.Pathologique.Global","Was.there.Chemotherapy...Une.Chimiotherapie.a.t.elle.administree.."),
+                      strata = "reason_death",
+                      data = (scc_doi%>%filter(...148 == "Expired")),
+                      includeNA = T, test = F)%>% print(showAllLevels=T)
+kableone(tab17, caption= "17: Distribution of participant characteristics by reason of death for those who expired")
+
+```
+
