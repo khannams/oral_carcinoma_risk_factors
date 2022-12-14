@@ -1,0 +1,355 @@
+---
+title: "Descriptive_Analysis_13-10-2022_meeting"
+author: "Mehak Khanna"
+date: "2022-10-12"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, warning = FALSE, message=FALSE)
+library(tidyverse)
+library(tableone)
+library(table1)
+library(here)
+library(lubridate)
+library(readxl)
+library(eeptools)
+scc_doi<-read_xlsx(here("Worksheet (Finished editing).xlsx"))
+base_scc_doi<-scc_doi%>%
+  filter(`Event Name`=="Initial Visit")
+```
+
+
+```{r Demographics, echo=FALSE, message=FALSE}
+##AGE
+class(base_scc_doi$`Date of birthDate de naissance`)
+base_scc_doi$`Date of birthDate de naissance`<-ymd(base_scc_doi$`Date of birthDate de naissance`)
+
+#table(is.na(base_scc_doi$`Date of Surgery  Date la chirurgie...82`), base_scc_doi$`Patient IDID du patient`, exclude = NULL) #50,18,38 do not have date of surgery
+
+#table(is.na(base_scc_doi$`--- --- If yes, Date of biopsy--- --- Si Oui, Date de la biopsie...180`), base_scc_doi$`Patient IDID du patient`, exclude = NULL)
+
+# base_scc_doi%>%
+#   select(`Patient IDID du patient`, `Date of birthDate de naissance`, `Date of Surgery  Date la chirurgie...82`,
+#          `--- --- If yes, Date of biopsy--- --- Si Oui, Date de la biopsie...36`)%>% view() #18,38 and 50 have dates of biopsy.
+#but verify if it is column 36 or column 180
+
+
+base_scc_doi$enddate<-NA
+class(base_scc_doi$enddate)
+base_scc_doi$enddate<-as.Date(base_scc_doi$enddate)
+
+for (i in 1:nrow(base_scc_doi)) {
+  if (is.na(base_scc_doi$`Date of Surgery  Date la chirurgie...82`)[i] == FALSE){
+    base_scc_doi$enddate[i]<- base_scc_doi$`Date of Surgery  Date la chirurgie...82`[i]
+  } else if (is.na(base_scc_doi$`Date of Surgery  Date la chirurgie...82`)[i] == TRUE){
+    base_scc_doi$enddate[i]<-base_scc_doi$`--- --- If yes, Date of biopsy--- --- Si Oui, Date de la biopsie...36`[i]
+  }
+}
+base_scc_doi$enddate
+
+#checking if all enddates > DOB
+base_scc_doi$enddate > base_scc_doi$`Date of birthDate de naissance` #all true
+
+base_scc_doi$age<-round(age_calc(dob= base_scc_doi$`Date of birthDate de naissance`, enddate = base_scc_doi$enddate, units = "years", precise = T), digits = 0)
+
+
+##Gender
+#table(base_scc_doi$GenderSexe, exclude = NULL)
+class(base_scc_doi$GenderSexe)
+base_scc_doi$GenderSexe<- as.factor(base_scc_doi$GenderSexe)
+
+##Smoking status
+#table(base_scc_doi$`History of tobacco useHistorique tabagique`, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$`History of tobacco useHistorique tabagique` == "Unknown / Not Reported")),5]<-NA  #reassigning unknown/not reported to NA category
+
+# 
+# table(base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic`, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic` == "Unknown / Not Reported")),11] <-NA  #reassigning unknown/not reported to NA category
+
+# table(base_scc_doi$`History of tobacco useHistorique tabagique`,base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic`, exclude = NULL)
+
+which(base_scc_doi$`History of tobacco useHistorique tabagique` == "Former Smoker" & base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic` == "Non-Smoker")
+
+base_scc_doi[c(which(base_scc_doi$`History of tobacco useHistorique tabagique` == "Former Smoker" & base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic` == "Non-Smoker")), 11]<- "Former Smoker"
+
+base_scc_doi[c(which(base_scc_doi$`History of tobacco useHistorique tabagique` == "Smoker" & base_scc_doi$`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic` == "Non-Smoker")), 11]<- "Former Smoker"
+
+
+
+##Alcohol status
+#table(base_scc_doi$`History of alcohol useHistorique de la consommation d'alcool`, exclude=NULL)
+base_scc_doi[c(which(base_scc_doi$`History of alcohol useHistorique de la consommation d'alcool` == "Unknown / Not Reported")),12] <-NA  #reassigning unknown/not reported to NA category @12 ans 16
+
+#table(base_scc_doi$`Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic`, exclude=NULL)
+base_scc_doi[c(which(base_scc_doi$`Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic` == "Unknown / Not Reported")),16] <-NA
+
+#table(base_scc_doi$`History of alcohol useHistorique de la consommation d'alcool`,base_scc_doi$`Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic`, exclude=NULL )
+
+base_scc_doi[c(which(base_scc_doi$`History of alcohol useHistorique de la consommation d'alcool` == "Former User" & base_scc_doi$`Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic` == "Non-User")), 16]<- "Former User"
+
+base_scc_doi[c(which(base_scc_doi$`History of alcohol useHistorique de la consommation d'alcool` == "User" & base_scc_doi$`Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic` == "Non-User")), 16]<- "Former User"
+
+base_scc_doi<-base_scc_doi%>%
+  rename(tobacco_hist= `History of tobacco useHistorique tabagique`,
+        tobacco_stat_diag=`Status of tobacco use at time of diagnosisStatut tabagique au moment du diagnostic`,
+        alc_hist= `History of alcohol useHistorique de la consommation d'alcool`,
+         alc_stat_diag = `Status of alcohol use at time of diagnosisStatut de la consommation d'alcool au moment du diagnostic`)
+
+
+
+tab1<-CreateTableOne(vars = c("age", "GenderSexe", "tobacco_hist", "tobacco_stat_diag", "alc_hist", "alc_stat_diag"),data = base_scc_doi, includeNA = T)%>%
+  print(showAllLevels=TRUE)
+
+kableone(tab1, caption="Table 1: Descriptive table of Demgraphic variables")
+```
+
+```{r Depth of Invasion, echo=FALSE, message=FALSE}
+base_scc_doi<-base_scc_doi%>%
+  rename(doi_42 =`--- --- If yes, Please Specify Depth of Invasion (tumor thickness, Unit: mm)--- --- Si oui, merci de preciser la profondeur de l'invasion (epaisseur de la tumeur, Unite: mm)...42`,
+         doi_125 =`---  If yes, Please Specify Depth of Invasion (tumor thickness, Unit: mm)--- Si oui, merci de preciser la profondeur de l'invasion (epaisseur de la tumeur, Unite: mm)...125`,
+         known_doi_124 = `Known Depth of Invasion?Profondeur de l'invasion connue ?...124`)
+
+base_scc_doi$`Patient IDID du patient`[base_scc_doi$doi_42 == "2-3"] #for patient ID 94 it is 2-3mm
+
+#table(base_scc_doi$doi_42,exclude = NULL)
+#don't know what to do with value 2-3 
+#as of now considering it as 2.5
+
+base_scc_doi[which(base_scc_doi$doi_42 == "2-3"),42]<-"2.5"
+class(base_scc_doi$doi_42)
+base_scc_doi$doi_42<-as.numeric(base_scc_doi$doi_42)
+#table(round(base_scc_doi$doi_42), exclude = NULL) #now only 120 missing
+base_scc_doi$doi_42<-round(base_scc_doi$doi_42)
+base_scc_doi$doi_42<-as.factor(base_scc_doi$doi_42)
+
+# table(base_scc_doi$`Known Depth of Invasion?Profondeur de l'invasion connue ?...124`, exclude=NULL) #160 observations
+# table(base_scc_doi$doi_125, exclude=NULL) #157 records
+
+# base_scc_doi%>%
+#   select(`Patient IDID du patient`,`Known Depth of Invasion?Profondeur de l'invasion connue ?...124`, doi_125 )%>% 
+#   filter(`Known Depth of Invasion?Profondeur de l'invasion connue ?...124` == "Yes" &
+#            is.na(doi_125))%>% view()
+
+class(base_scc_doi$doi_125)  
+#table(round(base_scc_doi$doi_125), exclude = NULL)
+base_scc_doi$doi_125<-round(base_scc_doi$doi_125)
+base_scc_doi$doi_125<-as.factor(base_scc_doi$doi_125)
+
+
+tab2<-CreateTableOne(vars = c("doi_42"),data = base_scc_doi, includeNA = T)%>%
+  print(showAllLevels=TRUE)
+
+kableone(tab2, caption="Table 2: Biopsy - Depth of Invasion variable")
+
+#table(base_scc_doi$`Known Depth of Invasion?Profondeur de l'invasion connue ?...124`, exclude=NULL) #160 known values
+
+tab3<-CreateTableOne(vars = c("known_doi_124","doi_125"),data = base_scc_doi, includeNA = T)%>%
+  print(showAllLevels=TRUE)
+
+kableone(tab3, caption="Table 3: Pathologic - Depth of Invasion variable")
+
+```
+
+```{r site of Primary lesion, echo=FALSE, message=FALSE}
+#table(base_scc_doi$`--- --- If Cutaneous, Eye, Metastatic and NOS, Specify--- --- Si Cutane, Yeux, Metatstatique ou NOS, Specifier`, exclude = NULL)
+
+base_scc_doi$`Patient IDID du patient`[base_scc_doi$`--- --- If Cutaneous, Eye, Metastatic and NOS, Specify--- --- Si Cutane, Yeux, Metatstatique ou NOS, Specifier` == "Lip"] #patient 41 still needs to be assigned
+
+base_scc_doi[base_scc_doi$`Patient IDID du patient`%in% c(52,129,155,266,271,325), 59]<-"Lower Lip" #all moved to lower lip as mentioned by Dr. Hans
+
+
+#table(base_scc_doi$...56)
+base_scc_doi[c(which(base_scc_doi$...56 %in% c("Floor of Mouth","FOM") )),56]<- "Floor of mouth"
+base_scc_doi[c(which(base_scc_doi$...56 %in% c("FOM/RMT", "RMT") )),56]<- "Retromolar trigone"
+base_scc_doi[c(which(base_scc_doi$...56 %in% c("Palate") )),56]<- "Hard Palate"
+
+# base_scc_doi%>%
+#   select(`Patient IDID du patient`,...56,`--- --- If Cutaneous, Eye, Metastatic and NOS, Specify--- --- Si Cutane, Yeux, Metatstatique ou NOS, Specifier` ) %>% view()
+#Switching 41 to NA as ther othe variable mentions it as lower lip.
+base_scc_doi[base_scc_doi$`Patient IDID du patient`%in% c(41), 59]<-NA
+
+base_scc_doi<-base_scc_doi%>%
+  unite(col = "primary_site",...56,`--- --- If Cutaneous, Eye, Metastatic and NOS, Specify--- --- Si Cutane, Yeux, Metatstatique ou NOS, Specifier`, sep = "", na.rm = T , remove = F)
+
+#table(base_scc_doi$primary_site, exclude = NULL) #one plank space
+#Patient ID 340 no value in either of the variables
+
+# base_scc_doi%>%
+#  select(`Patient IDID du patient`,primary_site,`--- --- If Cutaneous, Eye, Metastatic and NOS, Specify--- --- Si Cutane, Yeux, Metatstatique ou NOS, Specifier`, ...56 )%>% view()
+
+base_scc_doi[c(which(base_scc_doi$primary_site == "Lower lip")), 56]<-"Lower Lip"
+
+base_scc_doi$primary_site<-as.factor(base_scc_doi$primary_site)
+
+
+tab4<-CreateTableOne(vars = "primary_site",
+               data = base_scc_doi, includeNA = T )%>%
+  print(ShowAllLevels=TRUE)
+
+kableone(tab4, caption="Table 4: Distribution of site of primary lesion")
+
+```
+
+```{r Clincial TNM staging, echo=FALSE, message=FALSE}
+
+base_scc_doi<-base_scc_doi%>%
+  rename(clinical_t = ...61,
+         clinical_n = ...62,
+         clinical_m = ...63)
+
+base_scc_doi$clinical_t<-gsub("[[:punct:]]", "", base_scc_doi$clinical_t)
+base_scc_doi$clinical_n<-gsub("[[:punct:]]", "", base_scc_doi$clinical_n)
+base_scc_doi$clinical_m<-gsub("[[:punct:]]", "", base_scc_doi$clinical_m)
+
+tab5<-CreateTableOne(vars = c("clinical_t", "clinical_n","clinical_m"),
+               data = base_scc_doi,
+               includeNA = T)%>% print(ShowAllLevels=T)
+
+kableone(tab5, caption="Table 5: Distribution clinical TNM staging of primary lesion")
+
+#table(base_scc_doi$`Pathological stage overall--- Stage Pathologique Global`, exclude = NULL)
+
+base_scc_doi<-base_scc_doi%>%
+  rename(patho_overall_stage =`Pathological stage overall--- Stage Pathologique Global`)
+
+base_scc_doi[c(which(base_scc_doi$patho_overall_stage == "Stage IVA")),118]<-"Stage IV A"
+
+tab6<-CreateTableOne(vars = "patho_overall_stage",
+                     data = base_scc_doi,
+                     includeNA = T)%>%print(ShowAllLevels=T)
+
+kableone(tab6, caption="Table 6: Distribution overall Pathologic staging of tumor")
+
+
+base_scc_doi<-base_scc_doi%>%
+  rename(patho_t= `Pathological T stage--- Pathologique - Stage T`,
+         path_n=`Pathological N stage--- Pathologique - Stage N`,
+         patho_m=`Pathological M stage--- Pathologique - Stage M`)
+
+#table(base_scc_doi$clinical_n, base_scc_doi$path_n, exclude = NULL)
+base_scc_doi$path_n<-gsub("[[:punct:]]", "", base_scc_doi$path_n)
+
+base_scc_doi[c(which(base_scc_doi$path_n == "Not Applicable")),116]<-NA
+
+base_scc_doi<-base_scc_doi%>%
+  mutate(clinical_n_tab = case_when(clinical_n %in% "N0" ~ "N0",
+                                    clinical_n %in% c("N1","N2a","N2b","N2c") ~ "All not N0"),
+         path_n_tab = case_when(path_n %in% "N0" ~ "N0",
+                                path_n %in% c("N1","N2","N2a","N2b","N2c","N3") ~ "All not N0"))
+
+#table(base_scc_doi$path_n, base_scc_doi$path_n_tab, exclude = NULL) #checking if correct all working fine
+class(base_scc_doi$clinical_n_tab)
+base_scc_doi$clinical_n_tab<-as.factor(base_scc_doi$clinical_n_tab)
+base_scc_doi$path_n_tab<-as.factor(base_scc_doi$path_n_tab)
+
+table(base_scc_doi$clinical_n_tab, base_scc_doi$path_n_tab, exclude = NULL)
+
+tab7<-CreateTableOne(vars = "clinical_n_tab",
+               strata = "path_n_tab",
+               data = base_scc_doi,
+               includeNA = T, test = F) %>% print(ShowAllLevels=T)
+kableone(tab7, caption="Table 7: Clinical node stages stratified by pathological node stage " )
+
+
+base_scc_doi<-base_scc_doi%>%
+  rename(radio_t = ...73,
+         radio_n = ...74,
+         radio_m = ...75)
+base_scc_doi$radio_n<-gsub("[[:punct:]]", "", base_scc_doi$radio_n)
+#table(base_scc_doi$radio_n, exclude = NULL)
+
+base_scc_doi<-base_scc_doi%>%
+  mutate(clin_rad_n_tab = case_when((clinical_n %in% "N0")&(radio_n %in% "N0") ~ "clinc_radio_N0", TRUE ~ "clinc_radio_not_N0")) #%>%
+  #select(`Patient IDID du patient`, clinical_n, radio_n, clin_rad_n_tab)%>% view()
+#What if one of them is NA??
+
+tab7a<- CreateTableOne(vars = "path_n_tab",
+               strata = "clin_rad_n_tab",
+               data = base_scc_doi,
+               includeNA = T, test = F)%>% print(ShowAllLevels = T)
+                                  
+kableone(tab7a, caption="Table 7a: Clinical_radiographic node stages stratified by pathological node stage " )
+
+```
+
+```{r Degree of differentiation, echo=FALSE, message=FALSE}
+#table(base_scc_doi$`--- If Biopsy, Differentiation--- Si Biopsie, Differenciation ?...40`, exclude = NULL)
+
+#table(base_scc_doi$`Degree of DifferentiationDegree de differenciation...122`, exclude = NULL)
+
+base_scc_doi<-base_scc_doi%>%
+  rename(differ_40 =`--- If Biopsy, Differentiation--- Si Biopsie, Differenciation ?...40`,
+         differ_122 = `Degree of DifferentiationDegree de differenciation...122`)
+
+base_scc_doi[c(which(base_scc_doi$differ_40 == "Not Applicable")),40]<-NA
+base_scc_doi[c(which(base_scc_doi$differ_122 == "Not Applicable")),123]<-NA
+
+tab8<-CreateTableOne(vars = c("differ_40","differ_122"),
+               data = base_scc_doi,
+               includeNA = T)%>% print(ShowAllLevels=T)
+kableone(tab8, caption = "Table 8: distribution of participants by degree of differentiation")
+
+```
+
+```{r No. of positive nodes, echo=FALSE, message=FALSE}
+#table(base_scc_doi$...123, exclude = NULL)
+class(base_scc_doi$...123)
+base_scc_doi$...123<-as.factor(base_scc_doi$...123)
+
+base_scc_doi<-base_scc_doi%>%
+  rename(positive_node_count = ...123)
+
+tab9<-CreateTableOne(vars = "positive_node_count",
+               data= base_scc_doi,
+               includeNA = T) %>% print(ShowAllLevels=T)
+kableone(tab9, caption="Table 9: Distribution by no. of positive nodes")
+
+```
+
+```{r margins extracapsular spread pernueral vascular bone p16, echo=FALSE, message=FALSE}
+base_scc_doi<-base_scc_doi%>%
+  rename(margins = `Margins (microscopic)Marges (microscopique)...127`,
+         neg_margins =`--- If Margin Negative, Please select the closest distance:--- Si Marges Negatives, Selectionner la distance la plus proche:...128`,
+         extra_capsu= `Extracapsular Spread of Lymph NodesPropagation Extrascapulaire des Ganglions Lymphatiques...130`,
+         peri_neu_inva= `Perineural InvasionInvasion Preneurale...131`,
+         vas_lymph_inv= `Vascular/Lymphatic InvasionInvasion Vasculaire/Lymphatique...132`,
+         bone_inv= `Bone/Cartilage InvasionInvasion des Os/Cartilages...133`,
+         p16_status= `P16 statusStatut P16...134`)
+
+
+#table(base_scc_doi$margins, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$margins == "Not Applicable")), 128]<-NA
+
+#table(base_scc_doi$neg_margins, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$neg_margins == "> 5")), 129]<-">5"
+base_scc_doi[c(which(is.na(base_scc_doi$neg_margins))), 129]<-"Unknown"
+
+#table(base_scc_doi$extra_capsu, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$extra_capsu == "Not Applicable")), 131]<-NA
+
+#table(base_scc_doi$peri_neu_inva, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$peri_neu_inva == "Not Applicable")), 132]<-NA
+
+#table(base_scc_doi$vas_lymph_inv, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$vas_lymph_inv == "Not Applicable")), 133]<-NA
+
+#table(base_scc_doi$bone_inv, exclude = NULL)
+base_scc_doi[c(which(base_scc_doi$bone_inv == "Not Applicable")), 134]<-NA
+
+#table(base_scc_doi$p16_status, exclude = NULL)
+base_scc_doi[c(which(is.na(base_scc_doi$p16_status))), 135]<-"Not Reported"
+
+tab10<-CreateTableOne(vars = c("margins","neg_margins","extra_capsu","peri_neu_inva",
+                        "vas_lymph_inv","bone_inv","p16_status"),
+               data = base_scc_doi,
+               includeNA = T) %>% print(ShowAllLevels=T)
+kableone(tab10, caption="Table 10: Distribution of participants by margin of tumor, perinural invasion and etc")
+
+```
+
+```{r mains urgical procedure, echo=FALSE, message=FALSE}
+
+
+```
+
